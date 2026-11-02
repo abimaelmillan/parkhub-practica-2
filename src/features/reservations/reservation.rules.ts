@@ -31,8 +31,17 @@ export function validateExtensionEndTime(
   newEndTime: unknown,
   now: Date
 ): Date | null {
-  // TODO PRACTICE 2:
-  // Determine whether the requested end time is a valid extension of the
-  // current reservation. Return the parsed date only when it is valid.
-  return null;
+  // PRACTICE 2 (completado): la reservación sigue vigente y la nueva hora es
+  // una fecha válida estrictamente posterior a la hora final actual.
+  if (typeof newEndTime !== 'string' || currentEnd <= now) {
+    return null;
+  }
+
+  const newEnd = new Date(newEndTime);
+
+  if (Number.isNaN(newEnd.getTime()) || newEnd <= currentEnd) {
+    return null;
+  }
+
+  return newEnd;
 }
