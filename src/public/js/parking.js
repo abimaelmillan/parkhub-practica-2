@@ -264,6 +264,7 @@ function createExtendForm(reservation) {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     message.textContent = '';
+    setMessage(reservationsMessage, '');
     const newEnd = new Date(input.value);
     if (Number.isNaN(newEnd.getTime())) {
       message.textContent = 'Elige una fecha y hora válidas.';
