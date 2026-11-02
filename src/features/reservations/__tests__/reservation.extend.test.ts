@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, jest, test } from "@jest/globals";
+import { afterEach, beforeEach, describe, expect, jest, test } from "@jest/globals";
 import { Reservation } from "../reservation.model";
 import { hasTimeConflict, validateExtensionEndTime } from "../reservation.rules";
 import { extendReservation } from "../reservation.service";
@@ -178,6 +178,10 @@ describe("extendReservation", () => {
     findMock.mockResolvedValue([]);
   });
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   test("CP-01 updates the end time, saves it and returns the reservation", async () => {
     // Arrange
     const reservation = buildReservation();
@@ -246,6 +250,27 @@ describe("extendReservation", () => {
     expect(reservation.save).not.toHaveBeenCalled();
   });
 
+  test("CP-16 rejects with 409 a reservation that ends exactly now", async () => {
+    // Arrange: se fija la hora actual en 11:00; solo se simula Date, no los timers
+    jest.useFakeTimers({
+      now: new Date("2026-11-01T11:00:00.000Z"),
+      doNotFake: ["nextTick", "setImmediate", "clearImmediate", "setTimeout", "clearTimeout", "setInterval",
+        "clearInterval", "queueMicrotask", "hrtime", "performance"],
+    });
+    const reservation = buildReservation({
+      startTime: new Date("2026-11-01T10:00:00.000Z"),
+      endTime: new Date("2026-11-01T11:00:00.000Z"),
+    });
+    findByIdMock.mockResolvedValue(reservation);
+
+    // Act
+    const result = extendReservation(RESERVATION_ID, "2026-11-01T12:00:00.000Z");
+
+    // Assert
+    await expect(result).rejects.toMatchObject({ status: 409 });
+    expect(reservation.save).not.toHaveBeenCalled();
+  });
+
   test("CP-07 rejects an invalid end time with 400 and keeps the reservation unchanged", async () => {
     // Arrange
     const reservation = buildReservation();
@@ -301,6 +326,24 @@ describe("extendReservation", () => {
     // Assert
     await expect(result).rejects.toMatchObject({ status: 409 });
     expect(reservation.save).not.toHaveBeenCalled();
+  });
+
+  test("CP-10 looks for conflicts between the original start and the new end time", async () => {
+    // Arrange
+    const reservation = buildReservation();
+    findByIdMock.mockResolvedValue(reservation);
+    const newEnd = fromNow(90);
+
+    // Act
+    await extendReservation(RESERVATION_ID, newEnd.toISOString());
+
+    // Assert
+    expect(findMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startTime: { $lt: newEnd },
+        endTime: { $gt: reservation.startTime },
+      }),
+    );
   });
 
   test("CP-13 saves when the next reservation starts exactly at the new end time", async () => {
@@ -359,6 +402,7 @@ describe("extendReservation", () => {
 
     // Assert
     expect(findMock).toHaveBeenCalledWith(expect.objectContaining({ parkingSpotId: SPOT_ID }));
+    expect(reservation.save).toHaveBeenCalledTimes(1);
   });
 
   test("CP-18 extends a reservation that has not started yet", async () => {
