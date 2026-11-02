@@ -48,10 +48,23 @@ router.patch('/:id/cancel', async (req, res) => {
 });
 
 router.patch('/:id/extend', async (req, res) => {
-  // TODO PRACTICE 2:
-  // Connect this endpoint to the extension service and translate its result
-  // or errors into an appropriate HTTP response.
-  res.status(501).json({ message: 'Reservation extension is not implemented yet' });
+  // PRACTICE 2 (completado): 200 con la reservación actualizada o el estado
+  // que indica el Service (400, 404 o 409).
+  try {
+    const reservation = await reservationService.extendReservation(
+      req.params.id,
+      req.body?.endTime
+    );
+    res.json(reservation);
+  } catch (error) {
+    if (error instanceof reservationService.ReservationError) {
+      res.status(error.status).json({ message: error.message });
+      return;
+    }
+
+    console.error(error);
+    res.status(500).json({ message: 'Could not extend reservation' });
+  }
 });
 
 export default router;
