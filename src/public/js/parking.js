@@ -210,9 +210,23 @@ function renderReservations() {
 
     if (isCurrent) {
       const actions = makeElement('div', 'reservation-actions');
-      // TODO PRACTICE 2:
-      // Add an extension action for eligible reservations and connect it to
-      // the extension form. Keep the cancellation action working.
+      // PRACTICE 2 (completado): botón para abrir o cerrar el formulario de extensión.
+      const extendButton = makeElement('button', 'button button-quiet', 'Extender');
+      extendButton.type = 'button';
+      extendButton.setAttribute('aria-expanded', 'false');
+      extendButton.setAttribute('aria-label', `Extender la reservación del espacio ${number}`);
+      extendButton.addEventListener('click', () => {
+        const openForm = card.querySelector('.extend-form');
+        if (openForm) {
+          openForm.remove();
+          extendButton.setAttribute('aria-expanded', 'false');
+          return;
+        }
+        const form = createExtendForm(reservation);
+        card.append(form);
+        extendButton.setAttribute('aria-expanded', 'true');
+        form.querySelector('input').focus();
+      });
       const cancelButton = makeElement('button', 'button button-danger', 'Cancelar');
       cancelButton.type = 'button';
       cancelButton.addEventListener('click', () => {
@@ -224,7 +238,7 @@ function renderReservations() {
         }
         cancelReservation(reservation._id, cancelButton);
       });
-      actions.append(cancelButton);
+      actions.append(extendButton, cancelButton);
       card.append(actions);
     }
     reservationsList.append(card);
@@ -237,17 +251,59 @@ function createExtendForm(reservation) {
   const input = makeElement('input');
   input.type = 'datetime-local';
   input.required = true;
+  const currentEnd = new Date(reservation.endTime);
+  input.value = localDateTime(new Date(currentEnd.getTime() + 3600000));
   label.append(input);
   const button = makeElement('button', 'button button-primary', 'Guardar extensión');
   button.type = 'submit';
   const message = makeElement('p', 'extend-message');
   message.setAttribute('role', 'alert');
   form.append(label, button, message);
-  // TODO PRACTICE 2:
-  // Read the requested time, send the extension request, handle the result,
-  // and refresh the affected views when the operation succeeds.
+  // PRACTICE 2 (completado): enviar la nueva hora con PATCH, mostrar el
+  // resultado y refrescar reservaciones y espacios cuando se guarda.
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    message.textContent = '';
+    const newEnd = new Date(input.value);
+    if (Number.isNaN(newEnd.getTime())) {
+      message.textContent = 'Elige una fecha y hora válidas.';
+      return;
+    }
+    if (newEnd <= currentEnd) {
+      message.textContent = 'La nueva hora final debe ser posterior a la hora final actual.';
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = 'Guardando...';
+    try {
+      const response = await fetch(`/api/reservations/${reservation._id}/extend`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endTime: newEnd.toISOString() })
+      });
+      if (!response.ok) {
+        message.textContent = extendErrors[response.status] ?? 'No fue posible extender la reservación.';
+        return;
+      }
+      await Promise.all([loadReservations(), loadSpots()]);
+      setMessage(reservationsMessage, 'Reservación extendida correctamente.', 'success');
+    } catch (error) {
+      console.error(error);
+      message.textContent = 'No fue posible extender la reservación.';
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Guardar extensión';
+    }
+  });
   return form;
 }
+
+const extendErrors = {
+  400: 'La nueva hora final no es válida. Debe ser posterior a la hora final actual.',
+  404: 'No encontramos esta reservación. Actualiza la lista.',
+  409: 'No se puede extender: el espacio ya está reservado en ese horario o la reservación ya no está activa.'
+};
 
 async function createReservation(event) {
   event.preventDefault();
